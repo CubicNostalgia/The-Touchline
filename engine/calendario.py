@@ -1,6 +1,6 @@
-import random
+﻿import random
 from datetime import datetime, date, timedelta
-from data.database import DATAS_FIFA_2026, PAUSAS_TORNEIOS_2026, JANELAS_CALENDARIO_2026, PAULISTAO_POTES_2026
+from data.database import DATAS_FIFA_2026, PAUSAS_TORNEIOS_2026, JANELAS_CALENDARIO_2026
 
 
 def _data_bloqueada(dia: date, considerar_fifa=True):
@@ -21,6 +21,16 @@ def _proxima_data_valida(cursor, dia_semana, considerar_fifa=True):
         cursor += timedelta(days=1)
 
 
+def _datas_disponiveis(inicio: date, fim: date, dias_semana, considerar_fifa=True):
+    datas = []
+    cursor = inicio
+    while cursor <= fim:
+        if cursor.weekday() in dias_semana and not _data_bloqueada(cursor, considerar_fifa=considerar_fifa):
+            datas.append(cursor)
+        cursor += timedelta(days=1)
+    return datas
+
+
 def _gerar_rodadas_pontos_corridos(clubes):
     clubes = clubes[:]
     if len(clubes) % 2:
@@ -39,94 +49,67 @@ def _gerar_rodadas_pontos_corridos(clubes):
     return ida + volta
 
 
+def _gerar_rodadas_turno_simples(clubes):
+    clubes = clubes[:]
+    random.shuffle(clubes)
+    if len(clubes) % 2:
+        clubes.append(None)
+    n = len(clubes)
+    rodadas = []
+    for _ in range(n - 1):
+        rodada = []
+        for i in range(n // 2):
+            casa, fora = clubes[i], clubes[n - 1 - i]
+            if casa and fora:
+                rodada.append((casa, fora))
+        rodadas.append(rodada)
+        clubes = [clubes[0]] + [clubes[-1]] + clubes[1:-1]
+    return rodadas
+
+
 def gerar_calendario_brasileirao(clubes, competicao_id, inicio_override=None):
     janela = JANELAS_CALENDARIO_2026[competicao_id]
     inicio_base = inicio_override or janela["inicio"]
-    inicio = datetime.combine(inicio_base, datetime.min.time()).replace(hour=20)
+    fim = janela["fim"]
     rodadas = _gerar_rodadas_pontos_corridos(clubes)
-    cursor = inicio
+
+    datas = []
+    datas.extend(_datas_disponiveis(inicio_base, fim, [5, 2], considerar_fifa=False))  # sÃ¡bado e quarta
+    if len(datas) < len(rodadas):
+        extras = _datas_disponiveis(inicio_base, fim, [6], considerar_fifa=False)  # domingo
+        datas.extend([d for d in extras if d not in datas])
+    if len(datas) < len(rodadas):
+        extras = _datas_disponiveis(inicio_base, fim, [1, 3, 4], considerar_fifa=False)  # ter/qui/sex
+        datas.extend([d for d in extras if d not in datas])
+
+    datas = sorted(datas)
+
+    if len(datas) < len(rodadas):
+        cursor = datetime.combine(fim, datetime.min.time())
+        while len(datas) < len(rodadas):
+            cursor += timedelta(days=1)
+            if cursor.weekday() in [5, 2, 6, 1, 3, 4] and not _data_bloqueada(cursor.date(), considerar_fifa=False):
+                datas.append(cursor.date())
+
     calendario = []
     for idx, rodada in enumerate(rodadas, start=1):
-        if idx % 6 == 0:
-            dia_semana, horario = 2, (19, 30)  # quarta em rodada especial
-            salto = 3
+        dia = datas[idx - 1]
+        if dia.weekday() == 2:
+            horario = (19, 30)
+        elif dia.weekday() == 6:
+            horario = (16, 0)
+        elif dia.weekday() in (1, 3, 4):
+            horario = (21, 30)
         else:
-            dia_semana, horario = 5, (20, 0)  # sábado
-            salto = 7
-        cursor = _proxima_data_valida(cursor, dia_semana, considerar_fifa=False)
-        data_jogo = datetime(cursor.year, cursor.month, cursor.day, horario[0], horario[1])
+            horario = (20, 0)
+        data_jogo = datetime(dia.year, dia.month, dia.day, horario[0], horario[1])
         calendario.append({"rodada": idx, "competicao": competicao_id, "data": data_jogo, "partidas": rodada})
-        cursor += timedelta(days=salto)
     return calendario
 
 
-def _rodadas_intra_pote(times_pote):
-    a, b, c, d = times_pote
-    return [(a, b), (c, d), (a, c), (b, d), (a, d), (b, c)]
-
-
-def _gerar_duelos_interpotes(times):
-    nomes = list(times.keys())
-    confrontos = set()
-    por_time = {n: set() for n in nomes}
-    ordem = nomes[:]
-    random.shuffle(ordem)
-
-    for nome in ordem:
-        candidatos = [x for x in nomes if x != nome and x not in por_time[nome] and times[x] != times[nome]]
-        random.shuffle(candidatos)
-        for c in candidatos:
-            if len(por_time[nome]) >= 8 or len(por_time[c]) >= 8:
-                continue
-            chave = tuple(sorted((nome, c)))
-            if chave in confrontos:
-                continue
-            confrontos.add(chave)
-            por_time[nome].add(c)
-            por_time[c].add(nome)
-            if len(confrontos) >= 40:  # 16 times * 5 / 2
-                return list(confrontos)
-    return list(confrontos)
-
-
 def gerar_rodadas_paulistao(clubes):
-    mapa = {c.nome: c for c in clubes}
-    time_pote = {}
-    partidas = []
-
-    for pote, nomes in PAULISTAO_POTES_2026.items():
-        for nome in nomes:
-            time_pote[nome] = pote
-        intra = _rodadas_intra_pote(nomes)
-        partidas.extend(intra)
-
-    partidas.extend(_gerar_duelos_interpotes(time_pote))
-
-    jogos = []
-    mando = {n: 0 for n in mapa}
-    for a, b in partidas:
-        if a not in mapa or b not in mapa:
-            continue
-        casa, fora = (a, b) if mando[a] <= mando[b] else (b, a)
-        mando[casa] += 1
-        jogos.append((mapa[casa], mapa[fora]))
-
-    random.shuffle(jogos)
-    rodadas = [[] for _ in range(8)]
-    limite = len(mapa) // 2
-    used_in_round = [set() for _ in range(8)]
-
-    for casa, fora in jogos:
-        for i in range(8):
-            if len(rodadas[i]) >= limite:
-                continue
-            if casa in used_in_round[i] or fora in used_in_round[i]:
-                continue
-            rodadas[i].append((casa, fora))
-            used_in_round[i].update([casa, fora])
-            break
-
-    return rodadas
+    rodadas = _gerar_rodadas_turno_simples(clubes)
+    return rodadas[:8]
 
 
 def gerar_calendario_paulistao(clubes):
@@ -139,6 +122,26 @@ def gerar_calendario_paulistao(clubes):
         dia_semana, horario = (6, (16, 0)) if idx % 2 else (2, (21, 30))  # domingo/quarta
         cursor = _proxima_data_valida(cursor, dia_semana, considerar_fifa=False)
         data_jogo = datetime(cursor.year, cursor.month, cursor.day, horario[0], horario[1])
-        calendario.append({"rodada": idx, "competicao": "paulistao_a1", "data": data_jogo, "partidas": rodada})
+        calendario.append({"rodada": idx, "competicao": "paulistao_a1", "data": data_jogo, "partidas": rodada, "fase": "grupo"})
         cursor += timedelta(days=3)
+
+    cursor = _proxima_data_valida(cursor, 6, considerar_fifa=False)
+    data_jogo = datetime(cursor.year, cursor.month, cursor.day, 16, 0)
+    calendario.append({"competicao": "paulistao_a1", "data": data_jogo, "fase": "quartas"})
+    cursor += timedelta(days=3)
+
+    cursor = _proxima_data_valida(cursor, 2, considerar_fifa=False)
+    data_jogo = datetime(cursor.year, cursor.month, cursor.day, 21, 30)
+    calendario.append({"competicao": "paulistao_a1", "data": data_jogo, "fase": "semis"})
+    cursor += timedelta(days=3)
+
+    cursor = _proxima_data_valida(cursor, 6, considerar_fifa=False)
+    data_jogo = datetime(cursor.year, cursor.month, cursor.day, 16, 0)
+    calendario.append({"competicao": "paulistao_a1", "data": data_jogo, "fase": "final_ida"})
+    cursor += timedelta(days=7)
+
+    cursor = _proxima_data_valida(cursor, 6, considerar_fifa=False)
+    data_jogo = datetime(cursor.year, cursor.month, cursor.day, 16, 0)
+    calendario.append({"competicao": "paulistao_a1", "data": data_jogo, "fase": "final_volta"})
+
     return calendario

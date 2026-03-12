@@ -1,4 +1,4 @@
-import random
+﻿import random
 from core.jogador import Jogador
 
 PRENOMES = [
@@ -7,10 +7,10 @@ PRENOMES = [
     "Wagner", "Walace", "Anderson", "Hugo", "Gustavo", "Enzo", "Pablo", "Otávio", "Jefferson", "Jeferson",
     "Cristian", "Joaquim", "Jonas", "Cléber"
 ]
-MEIOS = ["de", "da", "do", "dos", "Neto", "Junior"]
+MEIOS_SUFIXO = ["Neto", "Junior"]
 SOBRENOMES = [
     "Silva", "Santos", "Oliveira", "Souza", "Pereira", "Lima", "Ferreira", "Costa", "Rodrigues", "Almeida",
-    "Ribeiro", "Carvalho", "Gomes", "Martins", "Araujo", "Rocha", "Barbosa", "Teixeira", "Correia", "Farias",
+    "Ribeiro", "Carvalho", "Gomes", "Martins", "Araújo", "Rocha", "Barbosa", "Teixeira", "Correia", "Farias",
     "Vasconcelos", "Sales", "Telles", "Tavares", "Melo", "Guimarães"
 ]
 APELIDOS = ["Juninho", "Dudu", "Pedrinho", "Vitinho", "Fernandinho", "Tetê", "Bolacha", "Canela", "Tomate", "Tanque"]
@@ -28,6 +28,22 @@ POSICOES_ELENCO = {
     "ATA": 3,
 }
 
+SOBRENOMES_DA = {
+    "Silva", "Costa", "Rocha", "Ferreira", "Teixeira", "Farias", "Barbosa",
+    "Ribeiro", "Carvalho", "Almeida", "Gomes", "Pereira", "Oliveira", "Lima",
+    "Tavares", "Guimarães", "Vasconcelos", "Melo",
+}
+
+SOBRENOMES_DOS = {"Santos"}
+
+
+def _preposicao_para_sobrenome(sobrenome):
+    if sobrenome in SOBRENOMES_DOS:
+        return "dos"
+    if sobrenome in SOBRENOMES_DA:
+        return "da"
+    return "de"
+
 
 def gerar_nome():
     modelo = random.random()
@@ -35,7 +51,11 @@ def gerar_nome():
         return random.choice(APELIDOS)
     if modelo < 0.55:
         return f"{random.choice(PRENOMES)} {random.choice(SOBRENOMES)}"
-    return f"{random.choice(PRENOMES)} {random.choice(MEIOS)} {random.choice(SOBRENOMES)}"
+    if modelo < 0.85:
+        sobrenome = random.choice(SOBRENOMES)
+        preposicao = _preposicao_para_sobrenome(sobrenome)
+        return f"{random.choice(PRENOMES)} {preposicao} {sobrenome}"
+    return f"{random.choice(PRENOMES)} {random.choice(MEIOS_SUFIXO)} {random.choice(SOBRENOMES)}"
 
 
 def gerar_over(forca_base: int):
@@ -55,3 +75,4 @@ def gerar_elenco(forca_base: int):
         for _ in range(quantidade):
             elenco.append(gerar_jogador(forca_base, posicao))
     return elenco
+
