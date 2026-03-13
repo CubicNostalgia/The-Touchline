@@ -5,7 +5,7 @@ from data.clubes import carregar_clubes_serie_a, carregar_clubes_serie_b_2026, c
 from core.clube import FORMACOES
 from core.liga import Liga
 from core.temporada import Temporada
-from core.save_manager import save_exists, carregar_save, iniciar_novo_save, salvar_save
+from save_manager import save_exists, carregar_save, iniciar_novo_save, salvar_save
 from ui.exibir_elenco import exibir_elenco
 from ui.mensagens import mensagem_boas_vindas_objetivos, gerar_objetivos_por_clube
 from data.database import HIERARQUIA_COMPETICOES
