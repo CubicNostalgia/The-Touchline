@@ -4,15 +4,15 @@ from datetime import date
 from engine.calendario import gerar_calendario_brasileirao, gerar_calendario_paulistao
 from engine.simulador import simular_partida
 from ui.mensagens import mensagem_resultado_objetivos
-from core.save_manager import salvar_save, carregar_save
 
 
 class Temporada:
-    def __init__(self, liga, clube_usuario=None, clubes_paulistao=None, objetivos=None):
+    def __init__(self, liga, clube_usuario=None, clubes_paulistao=None, objetivos=None, estado_mundo_inicial=None):
         self.liga = liga
         self.clube_usuario = clube_usuario
         self.objetivos = objetivos or []
         self.rodada_atual = 0
+        self.estado_mundo = estado_mundo_inicial or {"meta": {"temporada_atual": 2026}, "clubes": []}
 
         self.calendario_completo = []
         if clubes_paulistao:
@@ -234,7 +234,7 @@ class Temporada:
         print(f"⬇️ Rebaixados Série B: {', '.join([c.nome for c, _ in classif[-4:]])}")
 
     def _atualizar_estado_mundo(self, resultados_objetivos):
-        estado = carregar_save() or {"meta": {"temporada_atual": 2026}, "clubes": []}
+        estado = self.estado_mundo
         mapa_estado = {c["id"]: c for c in estado.get("clubes", [])}
 
         campeoes = {}
@@ -259,4 +259,8 @@ class Temporada:
 
         estado["clubes"] = list(mapa_estado.values())
         estado["meta"]["temporada_atual"] = estado["meta"].get("temporada_atual", 2026) + 1
-        salvar_save(estado)
+        self.estado_mundo = estado
+
+    def obter_estado_mundo(self):
+        return self.estado_mundo
+
