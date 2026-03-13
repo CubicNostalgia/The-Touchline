@@ -142,10 +142,10 @@ class Temporada:
                 cumprido = pos_paul is not None and pos_paul <= 8
             elif obj["id"] == "liga_top":
                 if "bra_a" in self.clube_usuario.competicoes:
-                    limite = 8 if self.clube_usuario.reputacao >= 60 else 12
+                    limite = 8 if self.clube_usuario.reputacao_tier >= 9 else 12
                     cumprido = pos_liga is not None and pos_liga <= limite
                 else:
-                    limite = 6 if self.clube_usuario.reputacao >= 30 else 10
+                    limite = 6 if self.clube_usuario.reputacao_tier >= 5 else 10
                     cumprido = pos_liga is not None and pos_liga <= limite
             elif obj["id"] == "base":
                 cumprido = base_ok
@@ -237,18 +237,23 @@ class Temporada:
         estado = carregar_save() or {"meta": {"temporada_atual": 2026}, "clubes": []}
         mapa_estado = {c["id"]: c for c in estado.get("clubes", [])}
 
-        clube_usuario_sucesso = all(r["cumprido"] for r in resultados_objetivos) if resultados_objetivos else False
-        rebaixado = False
-        if "bra_a" in self.tabelas and self._posicao_clube("bra_a") and self._posicao_clube("bra_a") > 16:
-            rebaixado = True
-        if "bra_b" in self.tabelas and self._posicao_clube("bra_b") and self._posicao_clube("bra_b") > 16:
-            rebaixado = True
+        campeoes = {}
+        for comp in self.tabelas:
+            classif_comp = self.classificacao(comp)
+            if classif_comp:
+                campeoes[comp] = classif_comp[0][0]
 
-        todos_clubes = {c for e in self.calendario_completo for p in e["partidas"] for c in p}
+        todos_clubes = {c for e in self.calendario_completo if "partidas" in e for p in e["partidas"] for c in p}
         for clube in todos_clubes:
+            titulos = sum(1 for camp in campeoes.values() if camp.id == clube.id)
+            pos_bra_a = next((i for i, (c, _) in enumerate(self.classificacao("bra_a"), start=1) if c.id == clube.id), None)
+            elite_assiduo = pos_bra_a is not None and pos_bra_a <= 16
+            permaneceu_elite = elite_assiduo
+
             clube.atualizar_reputacao_financas_fim_ano(
-                sucesso=clube_usuario_sucesso and self.clube_usuario and clube.id == self.clube_usuario.id,
-                rebaixado=rebaixado and self.clube_usuario and clube.id == self.clube_usuario.id,
+                titulos=titulos,
+                elite_assiduo=elite_assiduo,
+                permaneceu_elite=permaneceu_elite,
             )
             mapa_estado[clube.id] = clube.to_dict()
 
